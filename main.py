@@ -2,7 +2,6 @@ import subprocess
 import pandas as pd
 import json
 
-
 ## 1. fetch json from LDES
 
 context = r"C:\Users\teugelso\PycharmProjects\pythonProject\TraintheTrainer_05\src\utils\context.jsonld"
