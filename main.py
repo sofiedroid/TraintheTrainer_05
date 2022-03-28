@@ -1,16 +1,106 @@
-# This is a sample Python script.
+import subprocess
+import pandas as pd
+import json
+from urllib.request import urlopen
+from io import BytesIO
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+## 1. fetch json from LDES
+import requests as requests
+from PIL.Image import Image
 
+context = r"C:\Users\teugelso\PycharmProjects\pythonProject\TraintheTrainer_05\src\utils\context.jsonld"
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+endpoint = f"actor-init-ldes-client --pollingInterval 5000 --mimeType application/ld+json --context " + context + r" --fromTime 2022-03-20T00:00:00.309Z --emitMemberOnce false --disablePolling true https://apidg.gent.be/opendata/adlib2eventstream/v1/dmg/objecten > C:\Users\teugelso\PycharmProjects\pythonProject\TraintheTrainer_05\src\data\dmg_obj.json"
+filepath = r"C:\Users\teugelso\PycharmProjects\pythonProject\TraintheTrainer_05\src\data\dmg_obj.json"
 
+#subprocess.run(endpoint, shell=True, text=True)
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+## fetch_json(filepath)
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+## 2.parse result into dataframe
+
+def generate_dataframe(filepath):
+    with open(filepath, encoding="utf8") as p:
+        res = p.read()
+        result = res.splitlines()
+        print("done with parsing data from DMG")
+        return result
+
+df_dmg = pd.DataFrame(generate_dataframe(filepath))
+columns = ["URI", "title", "beschrijving", "objectnummer", "object_name", "association"]
+
+##define actions
+
+def fetch_title(df_dmg, range, _json):
+    try:
+        title = _json["http://www.cidoc-crm.org/cidoc-crm/P102_has_title"]
+        df_dmg.at[range, "title"] = title["@value"]
+    except Exception:
+        pass
+
+def fetch_beschrijving(df_dmg, range, _json):
+    try:
+        beschrijving = _json["http://www.cidoc-crm.org/cidoc-crm/P3_has_note"]
+        df_dmg.at[range, "beschrijving"] = beschrijving["@value"]
+    except Exception:
+        pass
+
+def fetch_objectnummer(df_dmg, range, _json):
+    """parse object number from json"""
+    try:
+        object_number = _json["Entiteit.identificator"]
+        for x in object_number:
+            try:
+                df_dmg.at[range, "objectnummer"] = x["skos:notation"]["@value"]
+            except Exception:
+                pass
+
+    except Exception:
+        pass
+
+def fetch_objectname(df_dmg, range, _json):
+    try:
+        object_names = []
+        # object_names.append(json["Entiteit.classificatie"])
+        try:
+            for i in _json["Entiteit.classificatie"]:
+                for a in i["Classificatie.toegekendType"]:
+                    on = a["skos:prefLabel"]["@value"]
+                    object_names.append(on)
+                    df_dmg.at[range, "object_name"] = object_names
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+def fetch_association(df_dmg, range_, _json):
+    """fetch associated terms related to the object from json"""
+    try:
+        associations = []
+        for i in _json["MensgemaaktObject.draagt"]:
+            for a in i["Werk.gaatOver"]:
+                ass = a["skos:prefLabel"]["@value"]
+                associations.append(ass)
+                df_dmg.at[range_, "association"] = associations
+            # print(associations)
+        print(associations)
+    except Exception:
+        pass
+
+for i in range(0, len(columns)):
+    df_dmg.insert(i, columns[i], "")
+
+for i in range(0, len(df_dmg)): ##change to len(df_dmg to fetch all)
+    x = df_dmg.loc[i]
+    j = json.loads(x[0])
+
+    uri = j["http://purl.org/dc/terms/isVersionOf"]["@id"]
+    df_dmg.at[i, "URI"] = uri
+
+    fetch_title(df_dmg, i, j)
+    fetch_beschrijving(df_dmg, i, j)
+    fetch_objectnummer(df_dmg, i, j)
+    fetch_objectname(df_dmg, i, j)
+    fetch_association(df_dmg, i, j)
+
+print(df_dmg)
